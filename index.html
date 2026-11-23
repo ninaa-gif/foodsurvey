@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Food Choices in Delivery Apps</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;margin:0;color:#222}
+#app{max-width:640px;margin:24px auto;background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+h2{margin-top:0}.q{font-size:18px;margin:0 0 16px}
+.opt{display:block;border:1px solid #ccc;border-radius:8px;padding:12px;margin:8px 0;cursor:pointer}
+.opt:hover{background:#f0f6ff}.opt input{margin-right:10px}
+.scale{display:flex;gap:6px;justify-content:space-between;margin:10px 0}
+.scale label{flex:1;text-align:center;border:1px solid #ccc;border-radius:8px;padding:10px 0;cursor:pointer}
+.scale label:hover{background:#f0f6ff}.scale input{display:block;margin:0 auto 4px}
+.anch{display:flex;justify-content:space-between;font-size:13px;color:#555}
+button{background:#0b6bcb;color:#fff;border:0;border-radius:8px;padding:12px 26px;font-size:16px;cursor:pointer;margin-top:18px}
+button:disabled{background:#9db8d6;cursor:not-allowed}
+.card{max-width:460px;margin:16px 0}.card img{width:100%;border:1px solid #ddd;border-radius:8px}
+.ph{border:2px dashed #999;border-radius:8px;padding:60px 10px;text-align:center;color:#666}
+.err{color:#b00020;font-size:14px;min-height:18px}
+.bar{height:6px;background:#e5e5e5;border-radius:3px;margin-bottom:18px}.bar div{height:6px;background:#0b6bcb;border-radius:3px}
+pre{white-space:pre-wrap;word-break:break-all;background:#f7f7f7;padding:10px;border-radius:6px;font-size:12px}
+</style></head><body><div id="app"></div>
+<script>
+/* ===== SETTINGS ===== */
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbyG0apL0DMz9zmIhHtfUelBzHqCa2D8UpIkyO5_qQn0z8N9s1WNAsSu7W1GN1BPU2ccLQ/exec";   // paste your Google Apps Script web-app URL here (see Setup file). Empty = TEST MODE.
+const IMAGES = { VEG_NOTAG:"veg_notag.png", VEG_TAG:"veg_tag.png", NONVEG_NOTAG:"nonveg_notag.png", NONVEG_TAG:"nonveg_tag.png" };
+/* ==================== */
+
+const VERSIONS = [
+ {Version:"V1",Tag:0,MealWord:"dinner",DayPart:"evening",  ClockTime:"8 pm",MealCode:1},
+ {Version:"V2",Tag:1,MealWord:"dinner",DayPart:"evening",  ClockTime:"8 pm",MealCode:1},
+ {Version:"V3",Tag:0,MealWord:"lunch", DayPart:"afternoon",ClockTime:"1 pm",MealCode:0},
+ {Version:"V4",Tag:1,MealWord:"lunch", DayPart:"afternoon",ClockTime:"1 pm",MealCode:0}];
+const L7a=["Not tasty at all","Very tasty"],L7b=["Not fresh at all","Very fresh"],L7c=["Very poor quality","Very good quality"];
+const D = {};            // collected data
+let step = 0, started = Date.now();
+
+function scenarioText(){return `Imagine it is a Saturday ${D.DayPart}, around ${D.ClockTime}. You have decided to order ${D.MealWord} through a food delivery app. You open the app and see the listing below. Please look at it as you normally would when ordering.`}
+
+/* Each step: {id, type, text|html, opts, anchors, end} ; steps are built lazily so piped text works */
+const STEPS = [
+ {id:"CONSENT",type:"single",pre:"<h2>Study on food choices in delivery apps</h2><p>This is an academic study on how people choose food on food delivery apps. It takes about 5 minutes. Your answers are anonymous and will be used only for research. There are no right or wrong answers, and you may stop at any time.</p>",
+  text:"By continuing, you agree to take part in this study.",opts:["I agree to take part","I do not agree"],stop:v=>v==="I do not agree"?"Thank you for your time. You have chosen not to take part.":null},
+ {id:"S1",type:"single",text:"Have you used any food delivery app (for example Swiggy or Zomato) in the past 3 months?",opts:["Yes","No"],
+  stop:v=>v==="No"?"Thank you. This study is only for people who have used a food delivery app in the last 3 months.":null},
+ {id:"S2",type:"single",text:"Which describes your food choice?",opts:["Vegetarian (I do not eat meat, fish or eggs)","Non-vegetarian (I eat meat, fish or eggs)"],
+  after:async v=>{D.Diet=v.startsWith("Veg")?"Veg":"NonVeg";
+    let pick=null;
+    if(ENDPOINT){ try{ const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),5000);
+      const r=await fetch(ENDPOINT+"?diet="+D.Diet,{signal:ctl.signal}); clearTimeout(t);
+      const j=await r.json(); pick=VERSIONS.find(x=>x.Version===j.version)||null; D.assign="even"; }catch(e){} }
+    if(!pick){pick=VERSIONS[Math.floor(Math.random()*4)]; D.assign="random";}
+    Object.assign(D,pick);}},
+ {id:"SCENARIO",type:"card"},
+ {id:"HH1",type:"scale",text:()=>"Thinking about the dish shown, how tasty do you expect this dish to be?",anch:L7a},
+ {id:"HH2",type:"scale",text:()=>"Thinking about the dish shown, how fresh do you expect this dish to be?",anch:L7b},
+ {id:"HH3",type:"scale",text:()=>"Thinking about the dish shown, how would you rate the overall quality of this dish?",anch:L7c},
+ {id:"CH1",type:"scale",text:()=>`How likely are you to choose this dish for your Saturday ${D.MealWord}?`,anch:["Not at all likely","Extremely likely"]},
+ {id:"MC1",type:"single",text:"Did the listing you just saw show a health tag?",opts:["Yes","No","Not sure"]},
+ {id:"MC2",type:"single",text:"In the scenario you read earlier, which meal were you ordering?",opts:["Breakfast","Lunch","Dinner","I do not remember"]},
+ {id:"MC3",type:"scale",text:()=>"For this meal, how important is it for you to eat healthy?",anch:["Not at all important","Extremely important"]},
+ {id:"AC1",type:"single",text:'To show that you are reading carefully, please select "Somewhat agree" for this question.',opts:["Strongly disagree","Disagree","Somewhat disagree","Neither agree nor disagree","Somewhat agree","Agree","Strongly agree"]},
+ {id:"D1",type:"single",text:"What is your age?",opts:["Under 18","18 to 24","25 to 30","31 to 35","36 to 40","Above 40"]},
+ {id:"D2",type:"single",text:"What is your gender?",opts:["Female","Male","Other","Prefer not to say"]},
+ {id:"D3",type:"single",text:"Where do you live?",opts:["Metro city (for example Delhi, Mumbai, Bengaluru, Chennai, Kolkata, Hyderabad)","Other city (tier 1 or tier 2)","Smaller town"]},
+ {id:"D4",type:"single",text:"In the past 3 months, how often did you order food through a delivery app?",opts:["Less than once a month","1 to 3 times a month","About once a week","2 to 3 times a week","Almost every day"]}
+];
+const app=document.getElementById("app");
+
+function render(){
+  const s=STEPS[step], pct=Math.round(step/STEPS.length*100);
+  let h=`<div class="bar"><div style="width:${pct}%"></div></div>`;
+  if(s.pre)h+=s.pre;
+  if(s.type==="card"){
+    const key=D.Diet.toUpperCase()+"_"+(D.Tag?"TAG":"NOTAG");
+    h+=`<p class="q">${scenarioText()}</p><div class="card"><img id="cardimg" src="${IMAGES[key]}" alt="Food listing" onerror="this.outerHTML='<div class=ph>Image missing: ${IMAGES[key]}</div>'"></div>`;
+  } else if(s.type==="single"){
+    h+=`<p class="q">${s.text}</p>`+s.opts.map((o,i)=>`<label class="opt"><input type="radio" name="a" value="${o.replace(/"/g,'&quot;')}">${o}</label>`).join("");
+  } else if(s.type==="scale"){
+    h+=`<p class="q">${s.text()}</p><div class="scale">`+[1,2,3,4,5,6,7].map(n=>`<label><input type="radio" name="a" value="${n}">${n}</label>`).join("")+`</div><div class="anch"><span>1 = ${s.anch[0]}</span><span>7 = ${s.anch[1]}</span></div>`;
+  }
+  h+=`<div class="err" id="err"></div><button id="next">${step===STEPS.length-1?"Submit":"Next"}</button>`;
+  app.innerHTML=h; window.scrollTo(0,0);
+  document.getElementById("next").onclick=next;
+}
+async function next(){
+  const s=STEPS[step];
+  if(s.type!=="card"){
+    const c=document.querySelector('input[name="a"]:checked');
+    if(!c){document.getElementById("err").textContent="Please choose an answer to continue.";return;}
+    D[s.id]=c.value;
+    if(s.stop){const m=s.stop(c.value);if(m){return end(m,false);}}
+    if(s.after){const b=document.getElementById("next");b.disabled=true;b.textContent="Loading…";await s.after(c.value);}
+  } else D.card_seen=Date.now();
+  step++; if(step>=STEPS.length) return finish(); render();
+}
+function end(msg,save){app.innerHTML=`<h2>Thank you</h2><p>${msg}</p>`;}
+async function finish(){
+  D.timestamp=new Date().toISOString(); D.seconds=Math.round((Date.now()-started)/1000);
+  const row=JSON.stringify(D);
+  app.innerHTML="<h2>Saving…</h2>";
+  let saved=false;
+  if(ENDPOINT){ try{await fetch(ENDPOINT,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:row});saved=true;}catch(e){} }
+  if(saved) app.innerHTML="<h2>Thank you for taking part.</h2><p>Your answers have been recorded.</p>";
+  else app.innerHTML=`<h2>Thank you for taking part.</h2><p><b>TEST MODE</b> (no data endpoint set, or saving failed). This is the response that would be recorded:</p><pre>${row}</pre>`;
+}
+render();
+</script></body></html>
