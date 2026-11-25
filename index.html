@@ -14,6 +14,15 @@ h2{margin-top:0}.q{font-size:18px;margin:0 0 16px}
 .anch{display:flex;justify-content:space-between;font-size:13px;color:#555}
 button{background:#0b6bcb;color:#fff;border:0;border-radius:8px;padding:12px 26px;font-size:16px;cursor:pointer;margin-top:18px}
 button:disabled{background:#9db8d6;cursor:not-allowed}
+button.sec{background:#fff;color:#0b6bcb;border:1px solid #0b6bcb}
+.nav{display:flex;justify-content:space-between;gap:12px}
+#app.wide{max-width:980px}
+.two{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.two .left{flex:0 0 340px;max-width:100%}
+@media(min-width:800px){.two .left{position:sticky;top:12px}}
+.two .left .card{margin:10px 0}
+.two .right{flex:1;min-width:280px}
+.scen{font-size:14px;color:#333;background:#f6f8fb;border-radius:8px;padding:10px 12px;margin:0}
 .card{max-width:460px;margin:16px 0}.card img{width:100%;border:1px solid #ddd;border-radius:8px}
 .ph{border:2px dashed #999;border-radius:8px;padding:60px 10px;text-align:center;color:#666}
 .err{color:#b00020;font-size:14px;min-height:18px}
@@ -44,7 +53,9 @@ const STEPS = [
  {id:"S1",type:"single",text:"Have you used any food delivery app (for example Swiggy or Zomato) in the past 3 months?",opts:["Yes","No"],
   stop:v=>v==="No"?"Thank you. This study is only for people who have used a food delivery app in the last 3 months.":null},
  {id:"S2",type:"single",text:"Which describes your food choice?",opts:["Vegetarian (I do not eat meat, fish or eggs)","Non-vegetarian (I eat meat, fish or eggs)"],
-  after:async v=>{D.Diet=v.startsWith("Veg")?"Veg":"NonVeg";
+  after:async v=>{const diet=v.startsWith("Veg")?"Veg":"NonVeg";
+    if(D.Version&&D.Diet===diet) return;      // came back and kept the same answer: keep the same version and picture
+    D.Diet=diet;
     let pick=null;
     if(ENDPOINT){ try{ const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),5000);
       const r=await fetch(ENDPOINT+"?diet="+D.Diet,{signal:ctl.signal}); clearTimeout(t);
@@ -52,13 +63,13 @@ const STEPS = [
     if(!pick){pick=VERSIONS[Math.floor(Math.random()*4)]; D.assign="random";}
     Object.assign(D,pick);}},
  {id:"SCENARIO",type:"card"},
- {id:"HH1",type:"scale",text:()=>"Thinking about the dish shown, how tasty do you expect this dish to be?",anch:L7a},
- {id:"HH2",type:"scale",text:()=>"Thinking about the dish shown, how fresh do you expect this dish to be?",anch:L7b},
- {id:"HH3",type:"scale",text:()=>"Thinking about the dish shown, how would you rate the overall quality of this dish?",anch:L7c},
+ {id:"HH1",type:"scale",stim:true,text:()=>"Thinking about the dish shown, how tasty do you expect this dish to be?",anch:L7a},
+ {id:"HH2",type:"scale",stim:true,text:()=>"Thinking about the dish shown, how fresh do you expect this dish to be?",anch:L7b},
+ {id:"HH3",type:"scale",stim:true,text:()=>"Thinking about the dish shown, how would you rate the overall quality of this dish?",anch:L7c},
  {id:"CH1",type:"scale",text:()=>`How likely are you to choose this dish for your Saturday ${D.MealWord}?`,anch:["Not at all likely","Extremely likely"]},
  {id:"MC1",type:"single",text:"Did the listing you just saw show a health tag?",opts:["Yes","No","Not sure"]},
  {id:"MC2",type:"single",text:"In the scenario you read earlier, which meal were you ordering?",opts:["Breakfast","Lunch","Dinner","I do not remember"]},
- {id:"MC3",type:"scale",text:()=>"For this meal, how important is it for you to eat healthy?",anch:["Not at all important","Extremely important"]},
+ {id:"MC3",type:"scale",text:()=>`How important is it for you to eat a healthy ${D.MealWord} on a Saturday ${D.MealWord==="dinner"?"night":"noon"}?`,anch:["Not at all important","Extremely important"]},
  {id:"AC1",type:"single",text:'To show that you are reading carefully, please select "Somewhat agree" for this question.',opts:["Strongly disagree","Disagree","Somewhat disagree","Neither agree nor disagree","Somewhat agree","Agree","Strongly agree"]},
  {id:"D1",type:"single",text:"What is your age?",opts:["Under 18","18 to 24","25 to 30","31 to 35","36 to 40","Above 40"]},
  {id:"D2",type:"single",text:"What is your gender?",opts:["Female","Male","Other","Prefer not to say"]},
@@ -67,22 +78,34 @@ const STEPS = [
 ];
 const app=document.getElementById("app");
 
+function cardKey(){return D.Diet.toUpperCase()+"_"+(D.Tag?"TAG":"NOTAG")}
+function imgHtml(){const k=cardKey();return `<div class="card"><img src="${IMAGES[k]}" alt="Food listing" onerror="this.outerHTML='<div class=ph>Image missing: ${IMAGES[k]}</div>'"></div>`}
+function questionHtml(s){
+  if(s.type==="single") return `<p class="q">${s.text}</p>`+s.opts.map(o=>`<label class="opt"><input type="radio" name="a" value="${o.replace(/"/g,'&quot;')}">${o}</label>`).join("");
+  if(s.type==="scale") return `<p class="q">${s.text()}</p><div class="scale">`+[1,2,3,4,5,6,7].map(n=>`<label><input type="radio" name="a" value="${n}">${n}</label>`).join("")+`</div><div class="anch"><span>1 = ${s.anch[0]}</span><span>7 = ${s.anch[1]}</span></div>`;
+  return "";
+}
 function render(){
   const s=STEPS[step], pct=Math.round(step/STEPS.length*100);
   let h=`<div class="bar"><div style="width:${pct}%"></div></div>`;
   if(s.pre)h+=s.pre;
   if(s.type==="card"){
-    const key=D.Diet.toUpperCase()+"_"+(D.Tag?"TAG":"NOTAG");
-    h+=`<p class="q">${scenarioText()}</p><div class="card"><img id="cardimg" src="${IMAGES[key]}" alt="Food listing" onerror="this.outerHTML='<div class=ph>Image missing: ${IMAGES[key]}</div>'"></div>`;
-  } else if(s.type==="single"){
-    h+=`<p class="q">${s.text}</p>`+s.opts.map((o,i)=>`<label class="opt"><input type="radio" name="a" value="${o.replace(/"/g,'&quot;')}">${o}</label>`).join("");
-  } else if(s.type==="scale"){
-    h+=`<p class="q">${s.text()}</p><div class="scale">`+[1,2,3,4,5,6,7].map(n=>`<label><input type="radio" name="a" value="${n}">${n}</label>`).join("")+`</div><div class="anch"><span>1 = ${s.anch[0]}</span><span>7 = ${s.anch[1]}</span></div>`;
-  }
-  h+=`<div class="err" id="err"></div><button id="next">${step===STEPS.length-1?"Submit":"Next"}</button>`;
+    h+=`<p class="q">${scenarioText()}</p>`+imgHtml();
+  } else if(s.stim){
+    h+=`<div class="two"><div class="left"><p class="scen">${scenarioText()}</p>${imgHtml()}</div><div class="right">${questionHtml(s)}</div></div>`;
+  } else h+=questionHtml(s);
+  h+=`<div class="err" id="err"></div><div class="nav"><button id="back" class="sec"${step===0?' style="visibility:hidden"':''}>Back</button><button id="next">${step===STEPS.length-1?"Submit":"Next"}</button></div>`;
+  app.className=s.stim?"wide":"";
   app.innerHTML=h; window.scrollTo(0,0);
+  if(D[s.id]!==undefined){const r=[...document.querySelectorAll('input[name="a"]')].find(x=>x.value===String(D[s.id]));if(r)r.checked=true;}
   document.getElementById("next").onclick=next;
+  document.getElementById("back").onclick=back;
 }
+function saveCurrent(){
+  const s=STEPS[step]; if(s.type==="card")return;
+  const c=document.querySelector('input[name="a"]:checked'); if(c)D[s.id]=c.value;
+}
+function back(){ if(step===0)return; saveCurrent(); step--; render(); }
 async function next(){
   const s=STEPS[step];
   if(s.type!=="card"){
